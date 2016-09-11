@@ -38,7 +38,7 @@ uint8_t oddLoop = 0;
 uint8_t targetX;
 uint8_t targetY;
 uint8_t pDests[MAX_PMISSILES][2] = {{100,100},{100,100},{100,100},{100,100},{100,100},{100,100},{100,100},{100,100},{100,100},{100,100}};
-uint8_t pMissiles[MAX_PMISSILES][3] = {{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0}};
+float pMissiles[MAX_PMISSILES][3] = {{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0}};
 uint8_t pDetonations[MAX_PMISSILES][3] = {{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0}};
 
 void setup() {
@@ -114,7 +114,7 @@ void stepMissiles(){
   for(uint8_t i = 0; i < MAX_PMISSILES; i++){
     //Check for a valid destination without a current detonation
     if( pDests[i][0] <= 84 && pDetonations[i][0] > 84 ){
-      float dir = atan2(pDests[i][1]-pMissiles[i][1], pDests[i][0]-pMissiles[i][0]);
+      double dir = atan2(pDests[i][1]-pMissiles[i][1], pDests[i][0]-pMissiles[i][0]);
       pMissiles[i][0] += PSPEED * cos(dir);
       pMissiles[i][1] += PSPEED * sin(dir);
       //If the missile is close enough to the destination, detonate
