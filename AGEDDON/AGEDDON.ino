@@ -27,11 +27,19 @@ B10000001,
 };
 
 
+#define LAUNCHER_ONE 1
+#define LAUNCHER_TWO 2
+#define MAX_PMISSILES 10
+#define PSPEED 3
+#define PRADIUS 6
 
 // State variables
+uint8_t oddLoop = 0;
 uint8_t targetX;
 uint8_t targetY;
-
+uint8_t pDests[MAX_PMISSILES][2] = {{100,100},{100,100},{100,100},{100,100},{100,100},{100,100},{100,100},{100,100},{100,100},{100,100}};
+uint8_t pMissiles[MAX_PMISSILES][3] = {{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0}};
+uint8_t pDetonations[MAX_PMISSILES][3] = {{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0}};
 
 void setup() {
   gb.begin();
@@ -40,9 +48,16 @@ void setup() {
   gb.pickRandomSeed();
 }
 
-void drawCursor(){
+void drawTargets(){
   gb.display.drawFastHLine(targetX-1,targetY,3);
   gb.display.drawFastVLine(targetX,targetY-1,3);
+
+  for(uint8_t i = 0; i < MAX_PMISSILES; i++){
+    //Check for a valid destination without a current detonation
+    if( pDests[i][0] <= 84 && pDetonations[i][0] > 84 ){
+      gb.display.drawPixel(pDests[i][0], pDests[i][1]);
+    }
+  }
 }
 
 void drawCities(){
@@ -55,14 +70,89 @@ void drawCities(){
     }
 }
 
+void drawMissiles(){
+  for(uint8_t i = 0; i < MAX_PMISSILES; i++){
+    //Check for a valid destination without a current detonation
+    if( pDests[i][0] <= 84 && pDetonations[i][0] > 84 ){
+      if(pMissiles[i][2] == LAUNCHER_ONE){
+        gb.display.drawLine(26,40,pMissiles[i][0], pMissiles[i][1]);
+      }else{
+        gb.display.drawLine(56,40,pMissiles[i][0], pMissiles[i][1]);
+      }
+    }
+  }
+}
+
+void drawDetonations(){
+  for(uint8_t i = 0; i < MAX_PMISSILES; i++){
+    if( pDetonations[i][0] <= 84 ){
+      gb.display.drawCircle(pDetonations[i][0],pDetonations[i][1],pDetonations[i][2]);
+    }
+  }
+}
+
+void launchMissile(uint8_t launcher){
+  //If there is no free slot in pDests, do not launch
+  for(uint8_t i = 0; i < MAX_PMISSILES; i++){
+    if( pDests[i][0] > 84 ){
+      pDests[i][0] = targetX;
+      pDests[i][1] = targetY;
+      if(launcher == LAUNCHER_ONE){
+        pMissiles[i][0] = 26; //X-coord of left launcher
+        pMissiles[i][2] = LAUNCHER_ONE;
+      }else{
+        pMissiles[i][0] = 56; //X-coord of right launcher
+        pMissiles[i][2] = LAUNCHER_TWO;
+      }
+      pMissiles[i][1] = 40; //Y-coord of both launchers
+      break;
+    }
+  }
+}
+
+void stepMissiles(){
+  for(uint8_t i = 0; i < MAX_PMISSILES; i++){
+    //Check for a valid destination without a current detonation
+    if( pDests[i][0] <= 84 && pDetonations[i][0] > 84 ){
+      float dir = atan2(pDests[i][1]-pMissiles[i][1], pDests[i][0]-pMissiles[i][0]);
+      pMissiles[i][0] += PSPEED * cos(dir);
+      pMissiles[i][1] += PSPEED * sin(dir);
+      //If the missile is close enough to the destination, detonate
+      if( abs( pDests[i][0] - pMissiles[i][0] ) < PSPEED && abs( pDests[i][1] - pMissiles[i][1] ) < PSPEED ){
+        pDetonations[i][0] = pDests[i][0];
+        pDetonations[i][1] = pDests[i][1];
+        pDetonations[i][2] = 1; //Start detonation at radius of 1
+      }
+    }
+  }
+}
+
+void stepDetonations(){
+  if( oddLoop ){
+    for(uint8_t i = 0; i < MAX_PMISSILES; i++){
+      if( pDetonations[i][0] <= 84 ){
+        if( pDetonations[i][2] < PRADIUS ){
+          pDetonations[i][2]++;
+        }else{
+          pDetonations[i][0] = 100; //Detonation is complete, remove it
+          pDests[i][0] = 100; //Remove this destination
+        }
+      }
+    }
+  }
+}
+
 void loop() {
   if(gb.update()){
+    oddLoop++;
+    oddLoop%=2;
+    
     //Player input
     if( gb.buttons.pressed(BTN_A) ){
-      
+      launchMissile(LAUNCHER_ONE);
     }
     if( gb.buttons.pressed(BTN_B) ){
-      
+      launchMissile(LAUNCHER_TWO);
     }
     
     if( gb.buttons.repeat(BTN_LEFT,1) ){
@@ -78,13 +168,15 @@ void loop() {
       targetY = targetY+2 < 48 ? targetY+2 : 48;
     }
 
-
     //Game logic
-
+    stepMissiles();
+    stepDetonations();
 
     //Drawing
-    drawCursor();
+    drawTargets();
     drawCities();
+    drawMissiles();
+    drawDetonations();
     
   }
 }
