@@ -32,6 +32,8 @@ B10000001,
 #define MAX_PMISSILES 10
 #define PSPEED 3
 #define PRADIUS 6
+#define EXPAND 0
+#define SHRINK 1
 
 // State variables
 uint8_t oddLoop = 0;
@@ -39,7 +41,7 @@ uint8_t targetX;
 uint8_t targetY;
 uint8_t pDests[MAX_PMISSILES][2] = {{100,100},{100,100},{100,100},{100,100},{100,100},{100,100},{100,100},{100,100},{100,100},{100,100}};
 float pMissiles[MAX_PMISSILES][3] = {{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0}};
-uint8_t pDetonations[MAX_PMISSILES][3] = {{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0}};
+uint8_t pDetonations[MAX_PMISSILES][4] = {{100,100,0,0},{100,100,0,0},{100,100,0,0},{100,100,0,0},{100,100,0,0},{100,100,0,0},{100,100,0,0},{100,100,0,0},{100,100,0,0},{100,100,0,0}};
 
 void setup() {
   gb.begin();
@@ -75,7 +77,7 @@ void drawMissiles(){
     //Check for a valid destination without a current detonation
     if( pDests[i][0] <= 84 && pDetonations[i][0] > 84 ){
       if(pMissiles[i][2] == LAUNCHER_ONE){
-        gb.display.drawLine(26,40,pMissiles[i][0], pMissiles[i][1]);
+        gb.display.drawLine(25,40,pMissiles[i][0], pMissiles[i][1]);
       }else{
         gb.display.drawLine(56,40,pMissiles[i][0], pMissiles[i][1]);
       }
@@ -98,7 +100,7 @@ void launchMissile(uint8_t launcher){
       pDests[i][0] = targetX;
       pDests[i][1] = targetY;
       if(launcher == LAUNCHER_ONE){
-        pMissiles[i][0] = 26; //X-coord of left launcher
+        pMissiles[i][0] = 25; //X-coord of left launcher
         pMissiles[i][2] = LAUNCHER_ONE;
       }else{
         pMissiles[i][0] = 56; //X-coord of right launcher
@@ -114,14 +116,17 @@ void stepMissiles(){
   for(uint8_t i = 0; i < MAX_PMISSILES; i++){
     //Check for a valid destination without a current detonation
     if( pDests[i][0] <= 84 && pDetonations[i][0] > 84 ){
-      double dir = atan2(pDests[i][1]-pMissiles[i][1], pDests[i][0]-pMissiles[i][0]);
-      pMissiles[i][0] += PSPEED * cos(dir);
-      pMissiles[i][1] += PSPEED * sin(dir);
       //If the missile is close enough to the destination, detonate
       if( abs( pDests[i][0] - pMissiles[i][0] ) < PSPEED && abs( pDests[i][1] - pMissiles[i][1] ) < PSPEED ){
         pDetonations[i][0] = pDests[i][0];
         pDetonations[i][1] = pDests[i][1];
-        pDetonations[i][2] = 1; //Start detonation at radius of 1
+        pDetonations[i][2] = 0; //Start detonation at radius of 0
+        pDetonations[i][3] = EXPAND; //Detonation is increasing in size
+      //Otherwise, keep moving towards destination
+      }else{
+        float dir = atan2(pDests[i][1]-pMissiles[i][1], pDests[i][0]-pMissiles[i][0]);
+        pMissiles[i][0] += PSPEED * cos(dir);
+        pMissiles[i][1] += PSPEED * sin(dir);
       }
     }
   }
@@ -131,11 +136,23 @@ void stepDetonations(){
   if( oddLoop ){
     for(uint8_t i = 0; i < MAX_PMISSILES; i++){
       if( pDetonations[i][0] <= 84 ){
-        if( pDetonations[i][2] < PRADIUS ){
-          pDetonations[i][2]++;
-        }else{
-          pDetonations[i][0] = 100; //Detonation is complete, remove it
-          pDests[i][0] = 100; //Remove this destination
+        if( pDetonations[i][3] == EXPAND ){ //If detonation is expanding
+          if( pDetonations[i][2] < PRADIUS ){
+            pDetonations[i][2]++;
+          }else{
+            pDetonations[i][3] = SHRINK; //Start shrinking
+          }
+        }
+        //Check this now instead of using else because it may have just
+        //set to SHRINK; immediately checking will remove a delay at full
+        //size.  If a delay is desired, this if can be switched to an else.
+        if( pDetonations[i][3] == SHRINK ){ //If detonation is shrinking
+          if( pDetonations[i][2] > 0 ){
+            pDetonations[i][2]--;
+          }else{
+            pDetonations[i][0] = 100; //Detonation is complete, remove it
+            pDests[i][0] = 100; //Remove this destination
+          }
         }
       }
     }
