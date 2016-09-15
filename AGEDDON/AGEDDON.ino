@@ -15,6 +15,17 @@ B01111110,
 B11111111,
 };
 
+const byte deadcity[] PROGMEM = {8,8,
+B00000000,
+B00000000,
+B00000000,
+B00000000,
+B00000000,
+B00000000,
+B00100000,
+B01100010,
+};
+
 const byte launcher[] PROGMEM = {8,8,
 B00011000,
 B00011000,
@@ -23,6 +34,17 @@ B00100100,
 B00100100,
 B01000010,
 B01000010,
+B10000001,
+};
+
+const byte deadlauncher[] PROGMEM = {8,8,
+B00000000,
+B00000000,
+B00000000,
+B00000000,
+B00000000,
+B01100110,
+B01011010,
 B10000001,
 };
 
@@ -40,6 +62,9 @@ B10000001,
 
 // State variables
 uint8_t oddLoop = 0;
+
+uint8_t cities[8] = {1,1,1,1,1,1,1,1}; //Whether the cities or launchers are alive
+
 uint8_t targetX;
 uint8_t targetY;
 uint8_t pDests[MAX_PMISSILES][2] = {{100,100},{100,100},{100,100},{100,100},{100,100},{100,100},{100,100},{100,100},{100,100},{100,100}};
@@ -72,12 +97,28 @@ void drawTargets(){
 }
 
 void drawCities(){
+  uint8_t alldead = 1;
   for(uint8_t i = 0; i < 8; i++){
       if( i == 2 || i == 5 ){
-        gb.display.drawBitmap(i*10+2,40,launcher);
+        if( cities[i] ){
+          gb.display.drawBitmap(i*10+2,40,launcher);
+        }else{
+          gb.display.drawBitmap(i*10+2,40,deadlauncher);
+        }
       }else{
-        gb.display.drawBitmap(i*10+2,40,city);
+        if( cities[i] ){
+          alldead = 0;
+          gb.display.drawBitmap(i*10+2,40,city);
+        }else{
+          gb.display.drawBitmap(i*10+2,40,deadcity);
+        }
       }
+    }
+
+    if( alldead ){
+      gb.display.cursorX = 84/2 - 5*3;
+      gb.display.cursorY = 48/2 - 5;
+      gb.display.print("THE END");
     }
 }
 
@@ -182,8 +223,8 @@ void stepMissiles(){
     if( eDests[i] <= 84 ){
        //If enemy missile is close enough to the destination, detonate
       if( abs( (eDests[i]*10+6) - eMissiles[i][2] ) < PSPEED && abs( 44 - eMissiles[i][3] ) < PSPEED ){
-        eDests[i] = 100;
-        //TODO: Destroy cities, launchers
+        cities[eDests[i]] = 0; //Destroy city/launcher
+        eDests[i] = 100; //Reset enemy missile
       //Otherwise, keep moving towards destination
       }else{
         float dir = atan2( 44-eMissiles[i][3], (eDests[i]*10+6)-eMissiles[i][2] );
