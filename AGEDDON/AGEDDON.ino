@@ -421,6 +421,14 @@ void stepCollision(){
   }
 }
 
+
+void checkMenu(){
+  if( gb.buttons.pressed(BTN_C) ){
+    gb.titleScreen(armageddon);
+    gb.battery.show = false;
+  }
+}
+
 void checkWin(){
   if( etotal == 0 ){
     for(uint8_t i = 0; i < MAX_EMISSILES; i++){
@@ -547,7 +555,7 @@ void stepDead(){
 
 void loop() {
   if(gb.update()){
-    
+
     switch( mode ){
       case MODE_GAME:
         stepGame();
@@ -561,6 +569,8 @@ void loop() {
         stepDead();
         break;
     }
+
+    checkMenu();
 
     counter++;
   }
