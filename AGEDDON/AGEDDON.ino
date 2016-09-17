@@ -505,12 +505,20 @@ void drawLull(){
   gb.display.cursorY += 5*2;
   gb.display.print(lullMissiles);
 
+  for(uint8_t i = 0; i < lullMissiles; i++){
+    gb.display.drawPixel(84/2 - 4*4 + i*2,48/2 - 3);
+  }
+
   gb.display.cursorX = 84/2 - 4*6;
   gb.display.cursorY += 5*2;
   for( uint8_t i; i < 8; i++ ){
     if( lullCities[i] ) cityCount++;
   }
   gb.display.print(cityCount);
+
+  for(uint8_t i = 0; i < cityCount; i++){
+    gb.display.drawBitmap(84/2 - 4*4 + i*9,48/2+2, city);
+  }
 
   drawScore();
   drawCities();
