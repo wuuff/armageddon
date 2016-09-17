@@ -87,6 +87,9 @@ B01011010,
 B10000001,
 };
 
+#define MODE_GAME 0 
+#define MODE_LULL 1
+#define MODE_DEAD 2
 
 #define LAUNCHER_ONE 1
 #define LAUNCHER_TWO 2
@@ -101,6 +104,13 @@ B10000001,
 
 // State variables
 uint8_t oddLoop = 0;
+uint8_t mode = 0;
+uint8_t counter = 0;
+uint8_t stage = 0; //Maximum of 255 stages
+uint32_t score = 0; //Score needs more space than other vars
+
+uint8_t lullMissiles = 0;
+uint8_t lullCities[8] = {0,0,0,0,0,0,0,0};
 
 uint8_t cities[8] = {1,1,1,1,1,1,1,1}; //Whether the cities or launchers are alive
 
@@ -124,6 +134,33 @@ void setup() {
   gb.pickRandomSeed();
 }
 
+void nextStage(){
+  stage++;
+  //Reset cities (since we cleared them for the visual effect
+  for( uint8_t i = 0; i < 8; i++ ){
+    cities[i] = lullCities[i];
+  }
+  //Reset launchers
+  cities[2] = 1;
+  cities[5] = 1;
+  //Reset missiles
+  pammo[0] = 10;
+  pammo[1] = 10;
+
+  etotal = stage > 10 ? 20 : 10+stage; //Max of 20 missiles per stage, start at 10
+  //echance = stage > 5 ? 5 : stage; //Max of 5/100 chance per frame
+  espeed = stage > 18 ? 2 : 0.2+(stage*0.1); //Max speed of 2, up 0.1 per stage, starts at 0.2
+}
+
+void nextLull(){
+  //Reset lullMissiles
+  lullMissiles = 0;
+  //Reset lullCities
+  for( uint8_t i = 0; i < 8; i++ ){
+    lullCities[i] = 0;
+  }
+}
+
 void drawTargets(){
   gb.display.drawFastHLine(targetX-1,targetY,3);
   gb.display.drawFastVLine(targetX,targetY-1,3);
@@ -137,7 +174,7 @@ void drawTargets(){
 }
 
 void drawCities(){
-  uint8_t alldead = 1;
+  //uint8_t alldead = 1;
   for(uint8_t i = 0; i < 8; i++){
       if( i == 2 || i == 5 ){
         if( cities[i] ){
@@ -147,7 +184,7 @@ void drawCities(){
         }
       }else{
         if( cities[i] ){
-          alldead = 0;
+          //alldead = 0;
           gb.display.drawBitmap(i*10+2,40,city);
         }else{
           gb.display.drawBitmap(i*10+2,40,deadcity);
@@ -155,11 +192,13 @@ void drawCities(){
       }
     }
 
+    /*
     if( alldead ){
       gb.display.cursorX = 84/2 - 5*3;
       gb.display.cursorY = 48/2 - 5;
       gb.display.print("THE END");
     }
+    */
 }
 
 void drawAmmo(){
@@ -236,27 +275,33 @@ void launchMissile(uint8_t launcher){
 
 void tryLaunchEnemy(){
   uint8_t someActive = 0;
-  // Check whether there are any active missiles
-  // If none are active, always spawn one to avoid
-  // long pauses without any enemy missiles
-  for(uint8_t i = 0; i < MAX_EMISSILES; i++){
-    if( eDests[i] <= 84 ){
-      someActive = 1;
-      break;
-    }
-  }
+
+  if( etotal > 0 ){
   
-  if( etotal > 0 && (!someActive || echance >= random(100)) ){ //echance of 100
+    // Check whether there are any active missiles
+    // If none are active, always spawn one to avoid
+    // long pauses without any enemy missiles
     for(uint8_t i = 0; i < MAX_EMISSILES; i++){
-      if( eDests[i] > 84 ){
-        eDests[i] = random(8); //Target one of the 6 cities or 2 launch sites
-        eMissiles[i][0] = random(84); //Screen width
-        eMissiles[i][1] = 0; //Top of screen
-        eMissiles[i][2] = eMissiles[i][0]; //Start and end are same
-        eMissiles[i][3] = 0; //Top of screen
-        break; //Only spawn one
+      if( eDests[i] <= 84 ){
+        someActive = 1;
+        break;
       }
     }
+    
+    if( (!someActive || echance >= random(100)) ){ //echance of 100
+      for(uint8_t i = 0; i < MAX_EMISSILES; i++){
+        if( eDests[i] > 84 ){
+          etotal--;
+          eDests[i] = random(8); //Target one of the 6 cities or 2 launch sites
+          eMissiles[i][0] = random(84); //Screen width
+          eMissiles[i][1] = 0; //Top of screen
+          eMissiles[i][2] = eMissiles[i][0]; //Start and end are same
+          eMissiles[i][3] = 0; //Top of screen
+          break; //Only spawn one
+        }
+      }
+    }
+
   }
 }
 
@@ -287,6 +332,15 @@ void stepMissiles(){
        //If enemy missile is close enough to the destination, detonate
       if( abs( (eDests[i]*10+6) - eMissiles[i][2] ) < PSPEED && abs( 44 - eMissiles[i][3] ) < PSPEED ){
         cities[eDests[i]] = 0; //Destroy city/launcher
+        
+        //If launcher, remove its ammo
+        if( eDests[i] == 2 ){
+          pammo[0] = 0;
+        }
+        if( eDests[i] == 5 ){
+          pammo[1] = 0;
+        }
+        
         eDests[i] = 100; //Reset enemy missile
       //Otherwise, keep moving towards destination
       }else{
@@ -338,44 +392,145 @@ void stepCollision(){
   }
 }
 
+void checkWin(){
+  if( etotal == 0 ){
+    for(uint8_t i = 0; i < MAX_EMISSILES; i++){
+      //Check for a valid destination
+      if( eDests[i] <= 84 ){
+        return;
+      }
+    }
+    //If we get here, all enemy missiles are destroyed and they have no more
+    nextLull();
+    mode = MODE_LULL;
+  }
+}
+
+void checkLose(){
+  for(uint8_t i = 0; i < 8; i++){
+    if( i != 2 && i != 5 ){
+      if( cities[i] ){
+        return; // A city remains alive
+      }
+    }
+  }
+  //If we get here, all cities are dead.  It is the end of days.
+  mode = MODE_DEAD;
+}
+
+void stepGame(){
+  //Player input
+  if( gb.buttons.pressed(BTN_A) ){
+    launchMissile(LAUNCHER_ONE);
+  }
+  if( gb.buttons.pressed(BTN_B) ){
+    launchMissile(LAUNCHER_TWO);
+  }
+  
+  if( gb.buttons.repeat(BTN_LEFT,1) ){
+    targetX = targetX-2 > 0 ? targetX-2 : 0;
+  }
+  if( gb.buttons.repeat(BTN_RIGHT,1) ){
+    targetX = targetX+2 < 84 ? targetX+2 : 84;
+  }
+  if( gb.buttons.repeat(BTN_UP,1) ){
+    targetY = targetY-2 > 0 ? targetY-2 : 0;
+  }
+  if( gb.buttons.repeat(BTN_DOWN,1) ){
+    targetY = targetY+2 < 48 ? targetY+2 : 48;
+  }
+
+  //Game logic
+  tryLaunchEnemy();
+  stepMissiles();
+  stepDetonations();
+  stepCollision();
+
+  //Drawing
+  drawTargets();
+  drawCities();
+  drawAmmo();
+  drawMissiles();
+  drawDetonations();
+
+  checkWin();
+  checkLose();
+}
+
+void drawLull(){
+  uint8_t cityCount = 0;
+  gb.display.cursorX = 84/2 - 4*6;
+  gb.display.cursorY = 48/2 - 5*4;
+  gb.display.print("BONUS POINTS");
+
+  gb.display.cursorX = 84/2 - 4*6;
+  gb.display.cursorY += 5*2;
+  gb.display.print(lullMissiles);
+
+  gb.display.cursorX = 84/2 - 4*6;
+  gb.display.cursorY += 5*2;
+  for( uint8_t i; i < 8; i++ ){
+    if( lullCities[i] ) cityCount++;
+  }
+  gb.display.print(cityCount);
+
+  drawCities();
+  drawAmmo();
+}
+
+void stepLull(){
+  
+  if( counter % 4 == 0 && (pammo[0] > 0 || pammo[1] > 0) ){
+    lullMissiles++;
+    if( pammo[0] > 0 ) pammo[0]--;
+    else pammo[1]--;
+  }
+
+  //If we have already iterated through the missiles
+  if( counter % 8 == 0 && pammo[0] == 0 && pammo[1] == 0 ){
+    for( uint8_t i = 0; i < 9; i++ ){
+      if( i == 8 ){ //We have iterated through all live cities
+        nextStage();
+        mode = MODE_GAME;
+        return;
+      }
+      //If not a launcher and the city is alive
+      if( i != 2 && i != 5 && cities[i] != 0 ){
+        lullCities[i] = 1;
+        cities[i] = 0;
+        break;
+      }
+    }
+  }
+  
+  drawLull();
+  
+  counter++;
+}
+
+void stepDead(){
+  gb.display.cursorX = 84/2 - 5*3;
+  gb.display.cursorY = 48/2 - 5;
+  gb.display.print("THE END");
+}
+
 void loop() {
   if(gb.update()){
     oddLoop++;
     oddLoop%=2;
     
-    //Player input
-    if( gb.buttons.pressed(BTN_A) ){
-      launchMissile(LAUNCHER_ONE);
-    }
-    if( gb.buttons.pressed(BTN_B) ){
-      launchMissile(LAUNCHER_TWO);
-    }
-    
-    if( gb.buttons.repeat(BTN_LEFT,1) ){
-      targetX = targetX-2 > 0 ? targetX-2 : 0;
-    }
-    if( gb.buttons.repeat(BTN_RIGHT,1) ){
-      targetX = targetX+2 < 84 ? targetX+2 : 84;
-    }
-    if( gb.buttons.repeat(BTN_UP,1) ){
-      targetY = targetY-2 > 0 ? targetY-2 : 0;
-    }
-    if( gb.buttons.repeat(BTN_DOWN,1) ){
-      targetY = targetY+2 < 48 ? targetY+2 : 48;
-    }
+    switch( mode ){
+      case MODE_GAME:
+        stepGame();
+        break;
 
-    //Game logic
-    tryLaunchEnemy();
-    stepMissiles();
-    stepDetonations();
-    stepCollision();
+      case MODE_LULL:
+        stepLull();
+        break;
 
-    //Drawing
-    drawTargets();
-    drawCities();
-    drawAmmo();
-    drawMissiles();
-    drawDetonations();
+      case MODE_DEAD:
+        stepDead();
+    }
     
   }
 }
