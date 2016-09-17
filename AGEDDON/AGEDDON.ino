@@ -91,11 +91,13 @@ B10000001,
 #define MODE_LULL 1
 #define MODE_DEAD 2
 
+#define TARGET_SPEED 3
+
 #define LAUNCHER_ONE 1
 #define LAUNCHER_TWO 2
 #define MAX_PMISSILES 10
 #define PSPEED 4
-#define PRADIUS 6
+#define PRADIUS 7
 #define EXPAND 0
 #define SHRINK 1
 
@@ -103,7 +105,6 @@ B10000001,
 #define MAX_CHANCE 50
 
 // State variables
-uint8_t oddLoop = 0;
 uint8_t mode = 0;
 uint8_t counter = 0;
 uint8_t stage = 0; //Maximum of 255 stages
@@ -114,8 +115,8 @@ uint8_t lullCities[8] = {0,0,0,0,0,0,0,0};
 
 uint8_t cities[8] = {1,1,1,1,1,1,1,1}; //Whether the cities or launchers are alive
 
-uint8_t targetX;
-uint8_t targetY;
+uint8_t targetX = 84/2;
+uint8_t targetY = 48/2;
 uint8_t pammo[2] = {10,10};
 uint8_t pDests[MAX_PMISSILES][2] = {{100,100},{100,100},{100,100},{100,100},{100,100},{100,100},{100,100},{100,100},{100,100},{100,100}};
 float pMissiles[MAX_PMISSILES][3] = {{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0},{100,100,0}};
@@ -146,6 +147,11 @@ void nextStage(){
   //Reset missiles
   pammo[0] = 10;
   pammo[1] = 10;
+  //Reset in-flight missiles
+  for( uint8_t i = 0; i < 10; i++ ){
+    pDests[i][0] = 100;
+    pDetonations[i][0] = 100;
+  }
 
   etotal = stage > 10 ? 20 : 10+stage; //Max of 20 missiles per stage, start at 10
   //echance = stage > 5 ? 5 : stage; //Max of 5/100 chance per frame
@@ -159,6 +165,28 @@ void nextLull(){
   for( uint8_t i = 0; i < 8; i++ ){
     lullCities[i] = 0;
   }
+}
+
+void drawScore(){
+  gb.display.cursorX = 84/2 - 4*3;
+  gb.display.cursorY = 0;
+
+  if( score < 100000 ){
+    gb.display.print(0);
+  }
+  if( score < 10000 ){
+    gb.display.print(0);
+  }
+  if( score < 1000 ){
+    gb.display.print(0);
+  }
+  if( score < 100 ){
+    gb.display.print(0);
+  }
+  if( score < 10 ){
+    gb.display.print(0);
+  }
+  gb.display.print(score);
 }
 
 void drawTargets(){
@@ -353,7 +381,7 @@ void stepMissiles(){
 }
 
 void stepDetonations(){
-  if( oddLoop ){
+  if( counter%2 == 0 ){
     for(uint8_t i = 0; i < MAX_PMISSILES; i++){
       if( pDetonations[i][0] <= 84 ){
         if( pDetonations[i][3] == EXPAND ){ //If detonation is expanding
@@ -384,8 +412,9 @@ void stepCollision(){
   for(uint8_t i = 0; i < MAX_PMISSILES; i++){
       if( pDetonations[i][0] <= 84 ){
         for(uint8_t j = 0; j < MAX_EMISSILES; j++){
-          if( pDetonations[i][2] >= sqrt( (eMissiles[j][2]-pDetonations[i][0])*(eMissiles[j][2]-pDetonations[i][0]) + (eMissiles[j][3]-pDetonations[i][1])*(eMissiles[j][3]-pDetonations[i][1]) ) ){
+          if( eDests[j] <= 84 && pDetonations[i][2] >= sqrt( (eMissiles[j][2]-pDetonations[i][0])*(eMissiles[j][2]-pDetonations[i][0]) + (eMissiles[j][3]-pDetonations[i][1])*(eMissiles[j][3]-pDetonations[i][1]) ) ){
             eDests[j] = 100; //Remove enemy missile
+            score+=25;
           }
         }
       }
@@ -428,16 +457,16 @@ void stepGame(){
   }
   
   if( gb.buttons.repeat(BTN_LEFT,1) ){
-    targetX = targetX-2 > 0 ? targetX-2 : 0;
+    targetX = targetX-TARGET_SPEED > 0 ? targetX-TARGET_SPEED : 0;
   }
   if( gb.buttons.repeat(BTN_RIGHT,1) ){
-    targetX = targetX+2 < 84 ? targetX+2 : 84;
+    targetX = targetX+TARGET_SPEED < 84 ? targetX+TARGET_SPEED : 84;
   }
   if( gb.buttons.repeat(BTN_UP,1) ){
-    targetY = targetY-2 > 0 ? targetY-2 : 0;
+    targetY = targetY-TARGET_SPEED > 0 ? targetY-TARGET_SPEED : 0;
   }
   if( gb.buttons.repeat(BTN_DOWN,1) ){
-    targetY = targetY+2 < 48 ? targetY+2 : 48;
+    targetY = targetY+TARGET_SPEED < 48 ? targetY+TARGET_SPEED : 48;
   }
 
   //Game logic
@@ -447,6 +476,7 @@ void stepGame(){
   stepCollision();
 
   //Drawing
+  drawScore();
   drawTargets();
   drawCities();
   drawAmmo();
@@ -460,8 +490,8 @@ void stepGame(){
 void drawLull(){
   uint8_t cityCount = 0;
   gb.display.cursorX = 84/2 - 4*6;
-  gb.display.cursorY = 48/2 - 5*4;
-  gb.display.print("BONUS POINTS");
+  gb.display.cursorY = 48/2 - 5*3;
+  gb.display.print(F("BONUS POINTS"));
 
   gb.display.cursorX = 84/2 - 4*6;
   gb.display.cursorY += 5*2;
@@ -474,6 +504,7 @@ void drawLull(){
   }
   gb.display.print(cityCount);
 
+  drawScore();
   drawCities();
   drawAmmo();
 }
@@ -482,6 +513,7 @@ void stepLull(){
   
   if( counter % 4 == 0 && (pammo[0] > 0 || pammo[1] > 0) ){
     lullMissiles++;
+    score+=10;
     if( pammo[0] > 0 ) pammo[0]--;
     else pammo[1]--;
   }
@@ -497,27 +529,24 @@ void stepLull(){
       //If not a launcher and the city is alive
       if( i != 2 && i != 5 && cities[i] != 0 ){
         lullCities[i] = 1;
+        score+=100;
         cities[i] = 0;
         break;
       }
     }
   }
-  
+
   drawLull();
-  
-  counter++;
 }
 
 void stepDead(){
   gb.display.cursorX = 84/2 - 5*3;
   gb.display.cursorY = 48/2 - 5;
-  gb.display.print("THE END");
+  gb.display.print(F("THE END"));
 }
 
 void loop() {
   if(gb.update()){
-    oddLoop++;
-    oddLoop%=2;
     
     switch( mode ){
       case MODE_GAME:
@@ -530,7 +559,9 @@ void loop() {
 
       case MODE_DEAD:
         stepDead();
+        break;
     }
-    
+
+    counter++;
   }
 }
