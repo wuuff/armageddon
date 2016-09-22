@@ -1,6 +1,7 @@
 #include <SPI.h>
 //Use for PROGMEM
 #include <avr/pgmspace.h>
+#include <EEPROM.h>
 #include <Gamebuino.h>
 Gamebuino gb;
 
@@ -43,7 +44,7 @@ B11111111,B11111111,B11111110,B01111111,B11111110,B01111111,B11111111,B11111111,
 B11111111,B11111111,B11111101,B11111111,B11111111,B10111111,B11111111,B11111111,
 };
 
-const byte city[] PROGMEM = {8,8,
+/*const byte city[] PROGMEM = {8,8,
 B00000000,
 B00000000,
 B00000000,
@@ -51,6 +52,17 @@ B00000000,
 B00100010,
 B01110110,
 B01111110,
+B11111111,
+};*/
+
+const byte city[] PROGMEM = {8,8,
+B00000000,
+B00000000,
+B00000000,
+B00000000,
+B01100100,
+B01101110,
+B01111111,
 B11111111,
 };
 
@@ -87,9 +99,11 @@ B01011010,
 B10000001,
 };
 
-#define MODE_GAME 0 
-#define MODE_LULL 1
-#define MODE_DEAD 2
+#define MODE_PREGAME 0
+#define MODE_GAME 1 
+#define MODE_LULL 2
+#define MODE_DEAD 3
+#define MODE_POSTDEAD 4
 
 #define TARGET_SPEED 3
 
@@ -107,6 +121,7 @@ B10000001,
 // State variables
 uint8_t mode = 0;
 uint8_t counter = 0;
+uint8_t flash = 0;
 uint8_t stage = 0; //Maximum of 255 stages
 uint32_t score = 0; //Score needs more space than other vars
 
@@ -130,6 +145,7 @@ float eMissiles[MAX_EMISSILES][4] = {{100,100,100,100},{100,100,100,100},{100,10
 
 void setup() {
   gb.begin();
+  loadHighscores();
   gb.titleScreen(armageddon);
   gb.battery.show = false;
   gb.pickRandomSeed();
@@ -151,6 +167,7 @@ void nextStage(){
   for( uint8_t i = 0; i < 10; i++ ){
     pDests[i][0] = 100;
     pDetonations[i][0] = 100;
+    eDests[i] = 100;
   }
 
   etotal = stage > 10 ? 20 : 10+stage; //Max of 20 missiles per stage, start at 10
@@ -452,6 +469,7 @@ void checkLose(){
     }
   }
   //If we get here, all cities are dead.  It is the end of days.
+  counter = 0;
   mode = MODE_DEAD;
 }
 
@@ -501,15 +519,15 @@ void drawLull(){
   gb.display.cursorY = 48/2 - 5*3;
   gb.display.print(F("BONUS POINTS"));
 
-  gb.display.cursorX = 84/2 - 4*6;
+  gb.display.cursorX = 84/2 - 4*8;
   gb.display.cursorY += 5*2;
   gb.display.print(lullMissiles);
 
   for(uint8_t i = 0; i < lullMissiles; i++){
-    gb.display.drawPixel(84/2 - 4*4 + i*2,48/2 - 3);
+    gb.display.drawPixel(84/2 - 4*6 + i*2,48/2 - 3);
   }
 
-  gb.display.cursorX = 84/2 - 4*6;
+  gb.display.cursorX = 84/2 - 4*8;
   gb.display.cursorY += 5*2;
   for( uint8_t i; i < 8; i++ ){
     if( lullCities[i] ) cityCount++;
@@ -517,7 +535,7 @@ void drawLull(){
   gb.display.print(cityCount);
 
   for(uint8_t i = 0; i < cityCount; i++){
-    gb.display.drawBitmap(84/2 - 4*4 + i*9,48/2+2, city);
+    gb.display.drawBitmap(84/2 - 4*6 + i*9,48/2+2, city);
   }
 
   drawScore();
@@ -559,6 +577,58 @@ void stepDead(){
   gb.display.cursorX = 84/2 - 5*3;
   gb.display.cursorY = 48/2 - 5;
   gb.display.print(F("THE END"));
+
+  if( mode == MODE_DEAD && counter%20 == 0 ){
+    mode = MODE_POSTDEAD;
+  }else if( mode == MODE_POSTDEAD ){
+    if( counter%8 == 0 ){
+      flash ^= 255;
+    }
+    if( flash ){
+      gb.display.cursorX = 84/2 - 5*3;
+      gb.display.cursorY = 48 - 9;
+      gb.display.print(F("PRESS \25"));
+
+      if( isHighscore(score) ){
+        gb.display.cursorX = 84/2 - 5*5 - 2;
+        gb.display.cursorY = 48 - 15;
+        gb.display.print(F("NEW HIGHSCORE"));
+      }
+    }
+
+    if( gb.buttons.pressed(BTN_A) ){
+      if( isHighscore(score) ){
+        char tmp_name[11];
+        gb.getDefaultName(tmp_name);
+        gb.keyboard(tmp_name, 11);
+        saveHighscore(score,tmp_name);
+        score = 0;
+      }
+      mode = MODE_PREGAME;
+    }
+  }
+}
+
+void stepPregame(){
+  drawHighscores();
+
+  if( counter%8 == 0 ){
+    flash ^= 255;
+  }
+  if( flash ){
+    gb.display.cursorX = 84/2 - 5*3;
+    gb.display.cursorY = 48 - 9;
+    gb.display.print(F("PRESS \25"));
+  }
+
+  if( gb.buttons.pressed(BTN_A) ){
+    stage = 255;
+    for( uint8_t i = 0; i < 8; i++ ){
+      lullCities[i] = 1;
+    }
+    nextStage(); //Reset to stage 0
+    mode = MODE_GAME;
+  }
 }
 
 void loop() {
@@ -574,7 +644,12 @@ void loop() {
         break;
 
       case MODE_DEAD:
+      case MODE_POSTDEAD:
         stepDead();
+        break;
+
+      case MODE_PREGAME:
+        stepPregame();
         break;
     }
 
