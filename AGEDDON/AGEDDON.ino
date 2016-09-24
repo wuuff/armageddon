@@ -99,6 +99,13 @@ B01011010,
 B10000001,
 };
 
+#define SOUND_PLAUNCH 0
+#define SOUND_ELAUNCH 1
+#define SOUND_DETONATE 2
+#define SOUND_SCORE 3
+#define SOUND_DEAD 4
+#define SOUND_LOSE 5
+
 #define MODE_PREGAME 0
 #define MODE_GAME 1 
 #define MODE_LULL 2
@@ -305,12 +312,14 @@ void launchMissile(uint8_t launcher){
         pMissiles[i][0] = 25; //X-coord of left launcher
         pMissiles[i][2] = LAUNCHER_ONE; //Launched from launcher one
         pammo[0]--;
+        playSound(SOUND_PLAUNCH);
       }else if(launcher == LAUNCHER_TWO && cities[5] && pammo[1]){
         pDests[i][0] = targetX;
         pDests[i][1] = targetY;
         pMissiles[i][0] = 56; //X-coord of right launcher
         pMissiles[i][2] = LAUNCHER_TWO; //Launched from launcher two
         pammo[1]--;
+        playSound(SOUND_PLAUNCH);
       }
       pMissiles[i][1] = 40; //Y-coord of both launchers
       break;
@@ -342,6 +351,7 @@ void tryLaunchEnemy(){
           eMissiles[i][1] = 0; //Top of screen
           eMissiles[i][2] = eMissiles[i][0]; //Start and end are same
           eMissiles[i][3] = 0; //Top of screen
+          playSound(SOUND_ELAUNCH);
           break; //Only spawn one
         }
       }
@@ -387,6 +397,7 @@ void stepMissiles(){
         }
         
         eDests[i] = 100; //Reset enemy missile
+        playSound(SOUND_DEAD);
       //Otherwise, keep moving towards destination
       }else{
         float dir = atan2( 44-eMissiles[i][3], (eDests[i]*10+6)-eMissiles[i][2] );
@@ -432,6 +443,7 @@ void stepCollision(){
           if( eDests[j] <= 84 && pDetonations[i][2] >= sqrt( (eMissiles[j][2]-pDetonations[i][0])*(eMissiles[j][2]-pDetonations[i][0]) + (eMissiles[j][3]-pDetonations[i][1])*(eMissiles[j][3]-pDetonations[i][1]) ) ){
             eDests[j] = 100; //Remove enemy missile
             score+=25;
+            playSound(SOUND_DETONATE);
           }
         }
       }
@@ -471,6 +483,7 @@ void checkLose(){
   //If we get here, all cities are dead.  It is the end of days.
   counter = 0;
   mode = MODE_DEAD;
+  playSound(SOUND_LOSE);
 }
 
 void stepGame(){
@@ -550,6 +563,7 @@ void stepLull(){
     score+=10;
     if( pammo[0] > 0 ) pammo[0]--;
     else pammo[1]--;
+    playSound(SOUND_SCORE);
   }
 
   //If we have already iterated through the missiles
@@ -565,6 +579,7 @@ void stepLull(){
         lullCities[i] = 1;
         score+=100;
         cities[i] = 0;
+        playSound(SOUND_SCORE);
         break;
       }
     }
