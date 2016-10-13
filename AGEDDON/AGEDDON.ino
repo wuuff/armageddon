@@ -617,8 +617,8 @@ void stepDead(){
         gb.getDefaultName(tmp_name);
         gb.keyboard(tmp_name, 11);
         saveHighscore(score,tmp_name);
-        score = 0;
       }
+      score = 0;
       mode = MODE_PREGAME;
     }
   }
